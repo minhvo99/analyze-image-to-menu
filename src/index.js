@@ -10,7 +10,11 @@ app.use(bodyParser.json());
 app.use(express.json());
 app.use(
   cors({
-    origin: ['http://localhost:8100'],
+    origin: [
+      'http://localhost:8100',
+      'http://localhost:8101',
+      'http://10.10.10.30:8101',
+    ],
     credentials: true,
   }),
 );

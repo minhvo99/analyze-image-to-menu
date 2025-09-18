@@ -1,34 +1,72 @@
-import vision from '@google-cloud/vision';
 import OpenAI from 'openai';
 import { config } from 'dotenv';
 import multer from 'multer';
+import vision from '@google-cloud/vision';
+import { parseMenuText } from '../utils/parseMenuText.js';
+import sharp from 'sharp';
+import fs from 'fs';
+import path from 'path';
+
 config();
 
-const client = new vision.ImageAnnotatorClient({
-  keyFilename: 'src/googlevision/angular-ionic-menu-app-c3726fce2a78.json',
-});
-const openai = new OpenAI({
+const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-const storage = multer.memoryStorage();
-const upload = multer({ storage });
+const visionClient = new vision.ImageAnnotatorClient({
+  keyFilename: 'src/googlevision/angular-ionic-menu-app-c3726fce2a78.json',
+});
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 export const uploadSingle = (fieldName) => upload.single(fieldName);
 
-export const visionORC = async (req, res) => {
+export const analyzeImage = async (req, res, next) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Image file is required' });
     }
-
-    // OCR using Google Vision
     const buffer = req.file.buffer;
-    const [result] = await client.textDetection({ image: { content: buffer } });
+    const [ocrResult] = await visionClient.documentTextDetection({
+      image: { content: buffer },
+    });
+    const text = ocrResult.fullTextAnnotation?.text || null;
 
-    const prompt = `
+    const [logoResult] = await visionClient.logoDetection({
+      image: { content: buffer },
+    });
+    const logos = logoResult.logoAnnotations?.map((l) => l.description) || [];
+
+    const [labelResult] = await visionClient.labelDetection({
+      image: { content: buffer },
+    });
+    const labels =
+      labelResult.labelAnnotations?.map((l) => l.description) || [];
+
+    const originalName = req.file.originalname
+      .split('.')
+      .slice(0, -1)
+      .join('.');
+    const timeStamp = Date.now();
+    const outPath = path.join(
+      process.cwd(),
+      `${originalName}-${timeStamp}.json`,
+    );
+
+    // fs.writeFileSync(outPath, JSON.stringify(ocrResult, null, 2), 'utf8');
+    // Parse thành menu JSON
+    const { restaurant, description, meals } = parseMenuText(text);
+
+    res.json({ restaurant, description, meals, logos, labels });
+  } catch (error) {
+    res.status(500).json({ error: error.message || 'Server error' });
+    next();
+  }
+};
+
+const prompt = `
 You are a restaurant menu analysis expert.
-Read and analyze the menu data in JSON format (OCR result from Google Vision) and return the standardized data with the following structure:
+Read and analyze the menu data in image format  and return the standardized data with the following structure:
 
 Result structure:
 
@@ -64,29 +102,39 @@ If the JSON contains restaurant information → fill in the "restaurant" field.
 If the JSON contains description/commitment of the restaurant → fill in the "description" field.
 
 OCR Data (JSON input):
-
-${JSON.stringify(result, null, 2)}
 `;
 
-    //analyze and create menu object
-    // const completion = await openai.chat.completions.create({
-    //   model: 'gpt-3.5-turbo',
-    //   messages: [{ role: 'user', content: prompt }],
-    //   temperature: 0,
-    // });
+export const visionORC = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'Image file is required' });
+    }
+    const base64Image = req.file.buffer.toString('base64');
 
-    // const content = completion.choices[0].message.content;
+    const response = await client.chat.completions.create({
+      model: 'gpt-4.1-mini',
+      messages: [
+        { role: 'system', content: prompt },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:${req.file.mimetype};base64,${base64Image}`,
+              },
+            },
+          ],
+        },
+      ],
+      temperature: 0,
+    });
 
-    // let data;
-    // try {
-    //   data = JSON.parse(content);
-    // } catch (err) {
-    //   data = { raw_json: result, menu_text: content };
-    // }
-
-    res.json({ result: result.textAnnotations[0]?.description });
+    const result = response.choices[0].message.content;
+    res.json(JSON.parse(result));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || 'Server error' });
+    next();
   }
 };
