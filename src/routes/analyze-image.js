@@ -1,13 +1,12 @@
 import express from 'express';
 import {
-  visionORC,
+  openAIORC,
   uploadSingle,
-  analyzeImage,
 } from '../controller/vision-orc.js';
 
 const analyzeImageRoute = express.Router();
 
-analyzeImageRoute.post('/', uploadSingle('image'), visionORC);
-analyzeImageRoute.post('/analyze-image', uploadSingle('image'), analyzeImage);
+
+analyzeImageRoute.post('/analyze-image', uploadSingle('image'), openAIORC);
 
 export default analyzeImageRoute;

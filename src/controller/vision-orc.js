@@ -3,8 +3,6 @@ import { config } from 'dotenv';
 import multer from 'multer';
 import vision from '@google-cloud/vision';
 import { parseMenuText } from '../utils/parseMenuText.js';
-import sharp from 'sharp';
-import fs from 'fs';
 import path from 'path';
 
 config();
@@ -21,7 +19,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 export const uploadSingle = (fieldName) => upload.single(fieldName);
 
-export const analyzeImage = async (req, res, next) => {
+export const visionORC = async (req, res, next) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Image file is required' });
@@ -66,45 +64,95 @@ export const analyzeImage = async (req, res, next) => {
 
 const prompt = `
 You are a restaurant menu analysis expert.
-Read and analyze the menu data in image format  and return the standardized data with the following structure:
+Read and analyze the menu data in image format and return standardized JSON data following the structure below.
+
+Important: 
+- Always provide translations for all required languages (kr, en, zh, ko, ja).
+- If a dish already has a name/description in a given language, keep it as is.
+- If a dish does not have that language available, translate from the best available source language (prefer EN > KR > others).
 
 Result structure:
-
-{
-  "restaurant": string | null,
-  "description": string | null,
-  "meals": [
-    {
-      "name": string,            // Main dish name in English (if available)
-      "another_name": string,    // Dish name in another language (Korean, Chinese, Japanese, etc.), multiple names can be combined with "/"
-      "price": string | [        // If there is only 1 price, use string (remove the "$" symbol). If multiple prices/options exist, use an array of objects:
-        {
-          "value": string,       // Price (without "$" symbol)
-          "note": string         // Note for that price (e.g., "Regular", "Garlic sauced")
-        }
-      ],
-      "note": string | null      // Additional info such as preparation style or notes (e.g., "Rice not included", "Spicy", "Cold noodle"...)
-    }
-  ]
-}
-
+[
+  {
+    "nameSet": {
+      "kr": { 
+        "name": string,             // Korean dish name, translate if missing
+        "description": string|null  // Optional description in Korean, translate if missing
+      },
+      "en": { 
+        "name": string,             // English dish name, translate if missing
+        "description": string|null  // Optional description in English, translate if missing
+      },
+      "zh": { 
+        "name": string,             // Chinese dish name, translate if missing
+        "description": string|null  // Optional description in Chinese, translate if missing
+      },
+      "ko": { 
+        "name": string,             // Korean (same as kr) 
+        "description": string|null 
+      },
+      "ja": { 
+        "name": string,             // Japanese dish name, translate if missing
+        "description": string|null  // Optional description in Japanese, translate if missing
+      }
+    },
+    "categoryID": string|null,           
+    "price_pickup": number|null,         
+    "price_delivery": number|null,       
+    "price_dinein": number|null,         
+    "requirePrice": boolean,             
+    "img": {
+      "path": string|null,               
+      "url": string|null                 
+    },
+    "imgthumb": {
+      "path": string|null,               
+      "url": string|null                 
+    },
+    "options": [
+      {
+        "nameSet": {
+          "kr": { "name": string, "description": string|null },
+          "en": { "name": string, "description": string|null },
+          "zh": { "name": string, "description": string|null },
+          "ko": { "name": string, "description": string|null },
+          "ja": { "name": string, "description": string|null }
+        },
+        "items": [
+          {
+            "nameSet": {
+              "kr": { "name": string, "description": string|null },   
+              "en": { "name": string, "description": string|null }    
+            },
+            "additionalCost_pickup": number|null,   
+            "additionalCost_dinein": number|null,   
+            "additionalCost_delivery": number|null, 
+            "default": boolean
+          }
+        ]
+      }
+    ],
+    "isActive": boolean
+  }
+]
 
 ⚠️ Mandatory rules:
 
-Do not omit any dish from the menu.
+1. Do not omit any dish from the menu.
+2. Always include translations for kr, en, zh, ko, ja:
+   - If the language version already exists, keep it.
+   - If missing, translate from an available language.
+   - "ko" must always duplicate "kr".
+3. For duplicate dish names with different prices/options → keep only one object and merge all prices/options.
+4. If restaurant information exists → fill "restaurant" field.
+5. If restaurant description/commitment exists → fill "description" field.
+6. The output must be valid JSON only (no comments, no markdown).
 
-Keep all alternative names in foreign languages if available.
-
-For duplicate dish names with different prices/options → keep only one object and put all prices into the array as specified.
-
-If the JSON contains restaurant information → fill in the "restaurant" field.
-
-If the JSON contains description/commitment of the restaurant → fill in the "description" field.
-
-OCR Data (JSON input):
+OCR Data:
 `;
 
-export const visionORC = async (req, res, next) => {
+
+export const openAIORC = async (req, res, next) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Image file is required' });

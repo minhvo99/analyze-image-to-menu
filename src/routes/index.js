@@ -3,6 +3,6 @@ import analyzeImageRoute from './analyze-image.js';
 
 const appRoute = express.Router();
 
-appRoute.use('/vision/ocr', analyzeImageRoute);
+appRoute.use('/open-ai/ocr', analyzeImageRoute);
 
 export default appRoute;

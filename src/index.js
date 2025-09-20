@@ -13,6 +13,7 @@ app.use(
     origin: [
       'http://localhost:8100',
       'http://localhost:8101',
+      'http://localhost:4200',
       'http://10.10.10.30:8101',
     ],
     credentials: true,
