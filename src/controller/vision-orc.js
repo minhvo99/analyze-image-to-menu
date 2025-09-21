@@ -4,6 +4,8 @@ import multer from 'multer';
 import vision from '@google-cloud/vision';
 import { parseMenuText } from '../utils/parseMenuText.js';
 import path from 'path';
+import { SYSTEM_PROMPT, USER_PROMPT } from '../constants/prompt.js';
+
 
 config();
 
@@ -62,95 +64,6 @@ export const visionORC = async (req, res, next) => {
   }
 };
 
-const prompt = `
-You are a restaurant menu analysis expert.
-Read and analyze the menu data in image format and return standardized JSON data following the structure below.
-
-Important: 
-- Always provide translations for all required languages (kr, en, zh, ko, ja).
-- If a dish already has a name/description in a given language, keep it as is.
-- If a dish does not have that language available, translate from the best available source language (prefer EN > KR > others).
-
-Result structure:
-[
-  {
-    "nameSet": {
-      "kr": { 
-        "name": string,             // Korean dish name, translate if missing
-        "description": string|null  // Optional description in Korean, translate if missing
-      },
-      "en": { 
-        "name": string,             // English dish name, translate if missing
-        "description": string|null  // Optional description in English, translate if missing
-      },
-      "zh": { 
-        "name": string,             // Chinese dish name, translate if missing
-        "description": string|null  // Optional description in Chinese, translate if missing
-      },
-      "ko": { 
-        "name": string,             // Korean (same as kr) 
-        "description": string|null 
-      },
-      "ja": { 
-        "name": string,             // Japanese dish name, translate if missing
-        "description": string|null  // Optional description in Japanese, translate if missing
-      }
-    },
-    "categoryID": string|null,           
-    "price_pickup": number|null,         
-    "price_delivery": number|null,       
-    "price_dinein": number|null,         
-    "requirePrice": boolean,             
-    "img": {
-      "path": string|null,               
-      "url": string|null                 
-    },
-    "imgthumb": {
-      "path": string|null,               
-      "url": string|null                 
-    },
-    "options": [
-      {
-        "nameSet": {
-          "kr": { "name": string, "description": string|null },
-          "en": { "name": string, "description": string|null },
-          "zh": { "name": string, "description": string|null },
-          "ko": { "name": string, "description": string|null },
-          "ja": { "name": string, "description": string|null }
-        },
-        "items": [
-          {
-            "nameSet": {
-              "kr": { "name": string, "description": string|null },   
-              "en": { "name": string, "description": string|null }    
-            },
-            "additionalCost_pickup": number|null,   
-            "additionalCost_dinein": number|null,   
-            "additionalCost_delivery": number|null, 
-            "default": boolean
-          }
-        ]
-      }
-    ],
-    "isActive": boolean
-  }
-]
-
-⚠️ Mandatory rules:
-
-1. Do not omit any dish from the menu.
-2. Always include translations for kr, en, zh, ko, ja:
-   - If the language version already exists, keep it.
-   - If missing, translate from an available language.
-   - "ko" must always duplicate "kr".
-3. For duplicate dish names with different prices/options → keep only one object and merge all prices/options.
-4. If restaurant information exists → fill "restaurant" field.
-5. If restaurant description/commitment exists → fill "description" field.
-6. The output must be valid JSON only (no comments, no markdown).
-
-OCR Data:
-`;
-
 
 export const openAIORC = async (req, res, next) => {
   try {
@@ -162,10 +75,11 @@ export const openAIORC = async (req, res, next) => {
     const response = await client.chat.completions.create({
       model: 'gpt-4.1-mini',
       messages: [
-        { role: 'system', content: prompt },
+        { role: 'system', content: SYSTEM_PROMPT },
         {
           role: 'user',
           content: [
+            { type: 'text', text: USER_PROMPT },
             {
               type: 'image_url',
               image_url: {
@@ -179,7 +93,8 @@ export const openAIORC = async (req, res, next) => {
     });
 
     const result = response.choices[0].message.content;
-    res.json(JSON.parse(result));
+
+    return res.json(JSON.parse(result));
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || 'Server error' });
