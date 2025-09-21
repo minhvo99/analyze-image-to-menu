@@ -1,3 +1,4 @@
 .env
 /node_modules
 src/googlevision/angular-ionic-menu-app-c3726fce2a78.json
+src/configs/serviceAccountKey.js
