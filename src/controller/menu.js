@@ -7,7 +7,11 @@ export const saveMenu = async (req, res, next) => {
       ...data,
       createdAt: new Date(),
     });
-    res.status(201).json({ id: docRef.id, ...data });
+ 
+    res.status(201).json({
+      message:'Order successfully!',
+      id: docRef.id 
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: error.message });

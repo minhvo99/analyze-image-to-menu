@@ -33,6 +33,8 @@ Result structure:
   "categoryID": string | null, // if it can be inferred, set as a simple string (e.g. "noodle", "soup", "bbq", "rice", "side", "dessert", "drink", ...); if unsure, set null
   "price": number | null,      // do not infer price from image → leave null, unless the image clearly shows a price list
   "image": string | null       // crop the dish image and return it as base64; if the menu is text-only, return null
+  "quantity": number| null    //default is 1
+  "option": null
 ]
 ⚠️ Mandatory rules:
 
