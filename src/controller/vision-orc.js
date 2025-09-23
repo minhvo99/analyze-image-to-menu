@@ -5,7 +5,8 @@ import vision from '@google-cloud/vision';
 import { parseMenuText } from '../utils/parseMenuText.js';
 import path from 'path';
 import { SYSTEM_PROMPT, USER_PROMPT } from '../constants/prompt.js';
-
+import { uploadToFirebase } from '../configs/firebase.js';
+import sharp from "sharp";
 
 config();
 
@@ -20,6 +21,13 @@ const visionClient = new vision.ImageAnnotatorClient({
 const upload = multer({ storage: multer.memoryStorage() });
 
 export const uploadSingle = (fieldName) => upload.single(fieldName);
+
+const reduceImageSize = async(buffer, maxSize = 1024, quality = 80) => {
+  return sharp(buffer)
+    .resize(maxSize, maxSize, { fit: "inside" })
+    .jpeg({ quality })
+    .toBuffer();
+}
 
 export const visionORC = async (req, res, next) => {
   try {
@@ -64,13 +72,21 @@ export const visionORC = async (req, res, next) => {
   }
 };
 
-
 export const openAIORC = async (req, res, next) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'Image file is required' });
     }
-    const base64Image = req.file.buffer.toString('base64');
+     const reducedBuffer = await reduceImageSize(req.file.buffer, 1024, 80);
+
+      const fileForUpload = {
+        ...req.file,
+        buffer: reducedBuffer,
+        originalname: req.file.originalname.replace(/\.[^.]+$/, ".jpeg"),
+        mimetype: "image/jpeg"
+      };
+
+    const imageUrl = await uploadToFirebase(fileForUpload);
 
     const response = await client.chat.completions.create({
       model: 'gpt-4.1-mini',
@@ -82,9 +98,7 @@ export const openAIORC = async (req, res, next) => {
             { type: 'text', text: USER_PROMPT },
             {
               type: 'image_url',
-              image_url: {
-                url: `data:${req.file.mimetype};base64,${base64Image}`,
-              },
+              image_url: { url: imageUrl },
             },
           ],
         },
@@ -92,9 +106,13 @@ export const openAIORC = async (req, res, next) => {
       temperature: 0,
     });
 
-    const result = response.choices[0].message.content;
+    const result = JSON.parse(response.choices[0].message.content);
 
-    return res.json(JSON.parse(result));
+
+    return res.json({
+      result,
+      imageUrl
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message || 'Server error' });

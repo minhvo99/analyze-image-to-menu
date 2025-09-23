@@ -30,10 +30,20 @@ Result structure:
       "description": string|null  // Optional description in Japanese, translate if missing
     }
   }
-  "categoryID": string | null, // if it can be inferred, set as a simple string (e.g. "noodle", "soup", "bbq", "rice", "side", "dessert", "drink", ...); if unsure, set null
-  "price": number | null,      // do not infer price from image → leave null, unless the image clearly shows a price list
-  "image": string | null       // crop the dish image and return it as base64; if the menu is text-only, return null
-  "quantity": number| null    //default is 1
+  "categoryID": string | null,    // if it can be inferred, set as a simple string (e.g. "noodle", "soup", "bbq", "rice", "side", "dessert", "drink", ...); if unsure, set null
+  "default_price": number | null,  // If the dish does not have sizes, then just return like this:"price": number | null
+   "prices": [                    // Regarding the price, check if the dish has sizes. For example, if the dish has 2 sizes, M with price x and L with price Y, then return an object like this:
+    {
+      "label": "M",
+      "value": number| null
+  },
+  {
+    "label": "L",
+    "value": numver | null
+  }
+]
+                                  
+  "image": string | null          // crop exact the dish image and return it as base64; if the menu is text-only, return null
   "option": null
 ]
 ⚠️ Mandatory rules:
